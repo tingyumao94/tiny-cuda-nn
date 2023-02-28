@@ -99,8 +99,8 @@ __device__ uint32_t fast_hash(const uint32_t pos_grid[N_DIMS]) {
 
 template <uint32_t N_DIMS, uint32_t N_FEATURES_PER_LEVEL>
 __device__ uint32_t grid_index(const GridType grid_type, const uint32_t feature, const uint32_t hashmap_size, const uint32_t grid_resolution, const uint32_t pos_grid[N_DIMS]) {
-	uint32_t stride = 1;
-	uint32_t index = 0;
+	uint64_t stride = 1;
+	uint64_t index = 0;
 
 	// The second part of the loop condition is needed to avoid integer overflows in finer levels.
 	#pragma unroll
@@ -113,7 +113,7 @@ __device__ uint32_t grid_index(const GridType grid_type, const uint32_t feature,
 		index = fast_hash<N_DIMS>(pos_grid);
 	}
 
-	return (index % hashmap_size) * N_FEATURES_PER_LEVEL + feature;
+	return uint32_t(index % hashmap_size) * N_FEATURES_PER_LEVEL + feature;
 }
 
 __device__ inline float random_val(uint32_t seed, uint32_t idx) {
@@ -204,10 +204,38 @@ __global__ void kernel_grid(
 		}
 	}
 
+	// if(i==1 && level==1){
+	// 	printf("grid kernel thread0\n");
+	// 	printf("thread %d: num elements = %d\n", i, num_elements);
+	// 	printf("thread %d: max level = %f\n", i, max_level);
+	// 	printf("thread %d: quantize_threshold = %f\n", i, quantize_threshold);
+	// 	printf("thread %d: scale = %f\n", i, scale);
+	// 	printf("thread %d level %d: log2_per_level_scale = %f\n", i, level, log2_per_level_scale);
+	// 	printf("thread %d: grid_resolution = %d\n", i, grid_resolution);
+	// 	printf("Table offset: %d\n", offset_table.data[level] * N_FEATURES_PER_LEVEL);
+
+	// 	for (uint32_t dim = 0; dim < N_POS_DIMS; ++dim) {
+	// 		printf("thread %d: positions_in(%d, %d) = %f\n", i, dim, i, positions_in(dim, i));
+	// 	}
+
+	// 	for (uint32_t dim = 0; dim < N_POS_DIMS; ++dim) {
+	// 		printf("thread %d: pos(%d) = %f\n", i, dim, pos[dim]);
+	// 	}
+
+	// 	for (uint32_t dim = 0; dim < N_POS_DIMS; ++dim) {
+	// 		printf("thread %d: pos_grid(%d) = %u\n", i, dim, pos_grid[dim]);
+	// 	}
+	// }
+
 	auto grid_val = [&](const uint32_t local_pos[N_POS_DIMS]) {
 		uint32_t index = grid_index<N_POS_DIMS, N_FEATURES_PER_LEVEL>(grid_type, 0, hashmap_size, grid_resolution, local_pos);
 		return *(vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[index];
 	};
+
+	// auto grid_index_query = [&](const uint32_t local_pos[N_POS_DIMS]) -> uint32_t {
+	// 	uint32_t index = grid_index_debug<N_POS_DIMS, N_FEATURES_PER_LEVEL>(grid_type, 0, hashmap_size, grid_resolution, local_pos);
+	// 	return index;
+	// };
 
 	if (interpolation_type == InterpolationType::Nearest) {
 		auto result = grid_val(pos_grid);
@@ -252,6 +280,12 @@ __global__ void kernel_grid(
 
 			auto val = grid_val(pos_grid_local);
 
+			// if(i==1 && level==1){
+			// 	auto val_ind = grid_index_query(pos_grid_local);
+			// 	printf("thread %d/level %d, idx = %d: val = %f, %f\n", i, level, idx, (float)((T*)&val)[0], (float)((T*)&val)[1]);
+			// 	printf("thread %d/level %d: idx = %d, val_ind = %u, pos_grid_local = %u, %u, %u \n", i, level, idx, val_ind, pos_grid_local[0], pos_grid_local[1], pos_grid_local[2]);
+			// }
+
 			#pragma unroll
 			for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
 				float data = (float)((T*)&val)[feature];
@@ -264,6 +298,12 @@ __global__ void kernel_grid(
 		for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
 			encoded_positions[i + (level * N_FEATURES_PER_LEVEL + f) * num_elements] = result[f];
 		}
+
+		// if(i==1){
+		// 	for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
+		// 		printf("thread %d/level %d: results(%d) = %f\n", i, level, f, static_cast<float>(result[f]));
+		// 	}
+		// }
 	}
 
 	// Gradient
