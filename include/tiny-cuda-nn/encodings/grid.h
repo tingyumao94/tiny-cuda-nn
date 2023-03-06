@@ -1097,6 +1097,7 @@ public:
 			grad_t* grid_gradient;
 			GPUMemoryArena::Allocation grid_gradient_tmp;
 
+			// Check if grad_t and T is the same type
 			if (!std::is_same<grad_t, T>::value) {
 				grid_gradient_tmp = allocate_workspace(stream, m_n_params * sizeof(grad_t));
 				grid_gradient = (grad_t*)grid_gradient_tmp.data();
